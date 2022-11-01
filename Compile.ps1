@@ -64,6 +64,14 @@ Get-ChildItem -Path "$Path" -File -Filter '*.ps1' -Recurse | ForEach-Object {
     $Filename = $_.Name
     $Basename = (Get-Item -Path $Path).Basename
     $ScriptName = $Basename
+
+    # INVALID CHARACTER : - cannot have that in a variable name
+    $BadCharsStr = '-'
+    $BadChars = $BadCharsStr.ToCharArray()
+    $BadChars | % {
+        if($ScriptName -match "$_"){ throw "File name '$ScriptName' contains an invalid character '$_'" }
+    }
+
     try {
 
         [void] $ScriptList.Add($Basename)
