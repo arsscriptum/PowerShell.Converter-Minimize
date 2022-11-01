@@ -9,4 +9,4 @@ https://arsscriptum.github.io/blog/converter-minimize/
 ## IMPORTANT NOTE
 The files that are compiled must __NOT__ contain a tilde '-' in the filename.
 
-![DEMO](https://arsscriptum.github.io/blog/converter-minimize/assets/img/posts/converter-minimize/demo.gif)
+![DEMO](https://arsscriptum.github.io/assets/img/posts/converter-minimize/demo.gif)
