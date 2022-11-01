@@ -1,4 +1,4 @@
-dependencies\<#
+<#
 #̷𝓍   𝓐𝓡𝓢 𝓢𝓒𝓡𝓘𝓟𝓣𝓤𝓜 
 #̷𝓍   
 #̷𝓍   PowerShell.ModuleBuilder
