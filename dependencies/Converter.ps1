@@ -63,6 +63,65 @@ function Remove-CommentsFromScriptBlock {
     return $Output
 }
 
+
+function Get-LoaderBlock{
+
+ [CmdletBinding(SupportsShouldProcess)]
+    param
+    ()
+
+   $LoaderBlock = @"
+# ------------------------------------`
+# Loader
+# ------------------------------------
+function ConvertFrom-Base64CompressedScriptBlock {
+
+    [CmdletBinding()] param(
+        [String]
+        `$ScriptBlock
+    )
+
+    # Take my B64 string and do a Base64 to Byte array conversion of compressed data
+    `$ScriptBlockCompressed = [System.Convert]::FromBase64String(`$ScriptBlock)
+
+    # Then decompress script's data
+    `$InputStream = New-Object System.IO.MemoryStream(, `$ScriptBlockCompressed)
+    `$GzipStream = New-Object System.IO.Compression.GzipStream `$InputStream, ([System.IO.Compression.CompressionMode]::Decompress)
+    `$StreamReader = New-Object System.IO.StreamReader(`$GzipStream)
+    `$ScriptBlockDecompressed = `$StreamReader.ReadToEnd()
+    # And close the streams
+    `$GzipStream.Close()
+    `$InputStream.Close()
+
+    `$ScriptBlockDecompressed
+}
+
+# For each scripts in the module, decompress and load it.
+# Set a flag in the Script Scope so that the scripts know we are loading a module
+# so he can have a specific logic
+`$Script:LoadingState = `$True
+`$ScriptList = @($( ($ScriptList | ForEach-Object { "'$_'" }) -join ','))
+`$ScriptList | ForEach-Object {
+    `$ScriptId = `$_
+     `$ScriptBlock = `"```$ScriptBlock`$(`$ScriptId)`" | Invoke-Expression
+    `$ClearScript = ConvertFrom-Base64CompressedScriptBlock -ScriptBlock `$ScriptBlock
+    try{
+        `$ClearScript | Invoke-Expression
+    }catch{
+        Write-Host `"===============================`" -f DarkGray
+        Write-Host `"`$ClearScript`" -f DarkGray
+        Write-Host `"===============================`" -f DarkGray
+        Write-Error `"ERROR IN script `$ScriptId . Details `$_`"
+    }
+}
+`$Script:LoadingState = `$False
+
+"@
+
+    $LoaderBlock
+
+}
+
 function Add-LoaderBlock{
 
  [CmdletBinding(SupportsShouldProcess)]
@@ -82,63 +141,7 @@ function Add-LoaderBlock{
         [string]$Path
     )
 
-
-    $LoaderBlock = @"
-# ------------------------------------`
-# Loader
-# ------------------------------------
-function ConvertFrom-Base64CompressedScriptBlock {
-
-    [CmdletBinding(SupportsShouldProcess)]
-    param(
-        [Parameter(Mandatory=`$true, ValueFromPipeline=`$true, HelpMessage=`"ScriptBlock`", Position=0)]
-        [string]`$ScriptBlock
-    )
-
-    #Write-Verbose `"==============================================================`"
-    #Write-Verbose `"ConvertFrom-Base64CompressedScriptBlock `$ScriptBlock...`"
-    #Write-Verbose `"==============================================================`"
-    # Take my B64 string and do a Base64 to Byte array conversion of compressed data
-    `$ScriptBlockCompressed = [System.Convert]::FromBase64String(`$ScriptBlock)
-
-    # Then decompress script's data
-    `$InputStream = New-Object System.IO.MemoryStream(, `$ScriptBlockCompressed)
-    `$GzipStream = New-Object System.IO.Compression.GzipStream `$InputStream, ([System.IO.Compression.CompressionMode]::Decompress)
-    `$StreamReader = New-Object System.IO.StreamReader(`$GzipStream)
-    `$ScriptBlockDecompressed = `$StreamReader.ReadToEnd()
-    # And close the streams
-    `$GzipStream.Close()
-    `$InputStream.Close()
-
-    `$ScriptBlockDecompressed
-}
-
-
-# For each scripts in the module, decompress and load it.
-# Set a flag in the Script Scope so that the scripts know we are loading a module
-# so he can have a specific logic
-`$Script:LoadingState = `$True
-
-foreach (`$h in `$ScriptsArray.GetEnumerator()) {
-    try{
-        `$ScriptBlock = `$(`$h.Value)
-        `$SName = `$(`$h.Name)
-        Write-Verbose `"Converting `$SName...`"
-        `$ClearScript = ConvertFrom-Base64CompressedScriptBlock -ScriptBlock `$ScriptBlock
-        Write-Verbose `"Running `$SName...`"
-        `$ClearScript | Invoke-Expression
-    }catch{
-        Write-Host `"===============================`" -f DarkGray
-        Write-Host `"`$ClearScript`" -f DarkGray
-        Write-Host `"===============================`" -f DarkGray
-        Write-Error `"ERROR IN script `$ScriptId . Details `$_`"
-    }
-}
-`$Script:LoadingState = `$False
-
-
-"@
-
+    $LoaderBlock = Get-LoaderBlock
     Add-Content -Path $Path -Value "`n`n$LoaderBlock`n" -Force
 }
 

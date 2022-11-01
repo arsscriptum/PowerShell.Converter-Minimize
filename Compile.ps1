@@ -32,125 +32,74 @@ $ScriptPath = split-path $script:MyInvocation.MyCommand.Path
 $ScriptFullName =(Get-Item -Path $script:MyInvocation.MyCommand.Path).DirectoryName
 
 #===============================================================================
-# Root Path
+# SCRIPT VARIABLES
 #===============================================================================
-$Global:ConsoleOutEnabled              = $true
-$Global:CurrentRunningScript           = Get-Script basename
 $Script:CurrPath                       = $ScriptPath
 $Script:RootPath                       = (Get-Location).Path
-If( $PSBoundParameters.ContainsKey('Path') -eq $True ){
-    $Script:RootPath = $Path
-}
-
 $Script:Time                           = Get-Date
 $Script:Date                           = $Time.GetDateTimeFormats()[19]
 $Script:ScriptList                     = New-Object System.Collections.ArrayList
 $Script:FileHeader                     = "#=================================================`n# Generated on $Script:Date`n#================================================="
-$Script:Psm1Content                    = "$Script:FileHeader`n`n"
-
-$Script:Converter                     = Join-Path $Script:CurrPath "dependencies\Converter.ps1"
+$Script:CompiledScript                 = "$Script:FileHeader`n`n"
+$Script:Converter                      = Join-Path $Script:CurrPath "dependencies\Converter.ps1"
  
-Write-Host "`n`n===============================================================================" -f DarkRed
-Write-Host "COMPILING SCRIPT FILES in $Path" -f DarkYellow;
-Write-Host "===============================================================================" -f DarkRed
 
-. "$Script:Converter"
+try{
+    Write-Host "`n`n===============================================================================" -f DarkRed
+    Write-Host "COMPILING SCRIPT FILES in $Path" -f DarkYellow;
+    Write-Host "===============================================================================" -f DarkRed
 
-$Script:CompilationErrorsCount = 0
+    . "$Script:Converter"
+
+    $Script:CompilationErrorsCount = 0
 
 
-Get-ChildItem -Path "$Path" -File -Filter '*.ps1' -Recurse | ForEach-Object {
-    $Path = $_.fullname
-    $Filename = $_.Name
-    $Basename = (Get-Item -Path $Path).Basename
-    $ScriptName = $Basename
+    Get-ChildItem -Path "$Path" -File -Filter '*.ps1' -Recurse | ForEach-Object {
+        $Path = $_.fullname
+        $Filename = $_.Name
+        $Basename = (Get-Item -Path $Path).Basename
+        $ScriptName = $Basename
 
-    # INVALID CHARACTER : - cannot have that in a variable name
-    $BadCharsStr = '-'
-    $BadChars = $BadCharsStr.ToCharArray()
-    $BadChars | % {
-        if($ScriptName -match "$_"){ throw "File name '$ScriptName' contains an invalid character '$_'" }
+        # INVALID CHARACTER : - cannot have that in a variable name
+        $BadCharsStr = '-'
+        $BadChars = $BadCharsStr.ToCharArray()
+        $BadChars | % {
+            if($ScriptName -match "$_"){ throw "File name '$ScriptName' contains an invalid character '$_'" }
+        }
+
+        try {
+
+            [void] $ScriptList.Add($Basename)
+            Write-Host " - compiling $Filename" -f DarkYellow;
+            # Read script block from module file
+            [string]$ScriptBlock = Get-Content -Path $Path -Raw
+
+            # Strip out comments
+            $ScriptBlock = Remove-CommentsFromScriptBlock -ScriptBlock $ScriptBlock
+
+            # Compress and Base64 encode script block
+            $ScriptBlockBase64 = Convert-ToBase64CompressedScriptBlock -ScriptBlock $ScriptBlock
+
+            $CompiledScript += "# ------------------------------------`n"
+            $CompiledScript += "# Script file - $ScriptName - `n"
+            $CompiledScript += "# ------------------------------------`n"
+            $CompiledScript += "`$ScriptBlock$($ScriptName) = `"$($ScriptBlockBase64)`"`n`n"
+        }catch { 
+            Show-ExceptionDetails($_) -ShowStack
+            $Script:CompilationErrorsCount += 1
+        }
     }
 
-    try {
+    $LoaderBlock = Get-LoaderBlock
 
-        [void] $ScriptList.Add($Basename)
-        Write-Host " - compiling $Filename" -f DarkYellow;
-        # Read script block from module file
-        [string]$ScriptBlock = Get-Content -Path $Path -Raw
+    $CompiledScript += "`n`n$($LoaderBlock)`n`n"
 
-        # Strip out comments
-        $ScriptBlock = Remove-CommentsFromScriptBlock -ScriptBlock $ScriptBlock
+    Write-Host "Saving to $OutFile" -f DarkYellow;
 
-        # Compress and Base64 encode script block
-        $ScriptBlockBase64 = Convert-ToBase64CompressedScriptBlock -ScriptBlock $ScriptBlock
+    Set-Content "$OutFile" -Value $CompiledScript 
 
-        $Psm1Content += "# ------------------------------------`n"
-        $Psm1Content += "# Script file - $ScriptName - `n"
-        $Psm1Content += "# ------------------------------------`n"
-        $Psm1Content += "`$ScriptBlock$($ScriptName) = `"$($ScriptBlockBase64)`"`n`n"
-    }catch { 
-        Show-ExceptionDetails($_) -ShowStack
-        $Script:CompilationErrorsCount += 1
-    }
+    Write-Host "Done!" -f DarkGreen;
+
+}catch{
+    Write-Error $_
 }
-
-$LoaderBlock = ''
-if ($Script:DebugMode -ne $True) {
-    $LoaderBlock = @"
-# ------------------------------------`
-# Loader
-# ------------------------------------
-function ConvertFrom-Base64CompressedScriptBlock {
-
-    [CmdletBinding()] param(
-        [String]
-        `$ScriptBlock
-    )
-
-    # Take my B64 string and do a Base64 to Byte array conversion of compressed data
-    `$ScriptBlockCompressed = [System.Convert]::FromBase64String(`$ScriptBlock)
-
-    # Then decompress script's data
-    `$InputStream = New-Object System.IO.MemoryStream(, `$ScriptBlockCompressed)
-    `$GzipStream = New-Object System.IO.Compression.GzipStream `$InputStream, ([System.IO.Compression.CompressionMode]::Decompress)
-    `$StreamReader = New-Object System.IO.StreamReader(`$GzipStream)
-    `$ScriptBlockDecompressed = `$StreamReader.ReadToEnd()
-    # And close the streams
-    `$GzipStream.Close()
-    `$InputStream.Close()
-
-    `$ScriptBlockDecompressed
-}
-
-# For each scripts in the module, decompress and load it.
-# Set a flag in the Script Scope so that the scripts know we are loading a module
-# so he can have a specific logic
-`$Script:LoadingState = `$True
-`$ScriptList = @($( ($ScriptList | ForEach-Object { "'$_'" }) -join ','))
-`$ScriptList | ForEach-Object {
-    `$ScriptId = `$_
-     `$ScriptBlock = `"```$ScriptBlock`$(`$ScriptId)`" | Invoke-Expression
-    `$ClearScript = ConvertFrom-Base64CompressedScriptBlock -ScriptBlock `$ScriptBlock
-    try{
-        `$ClearScript | Invoke-Expression
-    }catch{
-        Write-Host `"===============================`" -f DarkGray
-        Write-Host `"`$ClearScript`" -f DarkGray
-        Write-Host `"===============================`" -f DarkGray
-        Write-Error `"ERROR IN script `$ScriptId . Details `$_`"
-    }
-}
-`$Script:LoadingState = `$False
-
-"@
-
-}
-
-$Psm1Content += "`n`n$($LoaderBlock)`n`n"
-
-Write-Host "Saving to $OutFile" -f DarkYellow;
-
-Set-Content "$OutFile" -Value $Psm1Content 
-
-Write-Host "Done!" -f DarkGreen;
