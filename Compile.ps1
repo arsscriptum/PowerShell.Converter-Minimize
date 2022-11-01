@@ -51,7 +51,7 @@ $Script:Psm1Content                    = "$Script:FileHeader`n`n"
 $Script:Converter                     = Join-Path $Script:CurrPath "dependencies\Converter.ps1"
  
 Write-Host "`n`n===============================================================================" -f DarkRed
-Write-Host "COMPILING SCRIPT FILE" -f DarkYellow;
+Write-Host "COMPILING SCRIPT FILES in $Path" -f DarkYellow;
 Write-Host "===============================================================================" -f DarkRed
 
 . "$Script:Converter"
@@ -75,7 +75,7 @@ Get-ChildItem -Path "$Path" -File -Filter '*.ps1' -Recurse | ForEach-Object {
     try {
 
         [void] $ScriptList.Add($Basename)
-        Write-Host "COMPILING SCRIPT FILE $Basename" -f DarkYellow;
+        Write-Host " - compiling $Filename" -f DarkYellow;
         # Read script block from module file
         [string]$ScriptBlock = Get-Content -Path $Path -Raw
 
@@ -149,4 +149,8 @@ function ConvertFrom-Base64CompressedScriptBlock {
 
 $Psm1Content += "`n`n$($LoaderBlock)`n`n"
 
+Write-Host "Saving to $OutFile" -f DarkYellow;
+
 Set-Content "$OutFile" -Value $Psm1Content 
+
+Write-Host "Done!" -f DarkGreen;
