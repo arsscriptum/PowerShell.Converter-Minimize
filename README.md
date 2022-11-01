@@ -4,3 +4,6 @@ From a [Reddit Post](https://www.reddit.com/r/PowerShell/comments/yixmxr/combini
 minimize (i.e. compile) a group of PowerShell scripts in a single script file. I have taken a part of my module building project and posted it here.
 
 https://arsscriptum.github.io/blog/converter-minimize/
+
+
+![DEMO](https://arsscriptum.github.io/blog/converter-minimize/assets/img/posts/converter-minimize/demo.gif)
