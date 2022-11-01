@@ -5,5 +5,8 @@ minimize (i.e. compile) a group of PowerShell scripts in a single script file. I
 
 https://arsscriptum.github.io/blog/converter-minimize/
 
+<img src="https://arsscriptum.github.io/blog/converter-minimize/assets/img/posts/converter-minimize/important.png" alt="important" style="height: 100px; width:100px;"/>
+## IMPORTANT NOTE
+The files that are compiled must __NOT__ contain a tilde '-' in the filename.
 
 ![DEMO](https://arsscriptum.github.io/blog/converter-minimize/assets/img/posts/converter-minimize/demo.gif)
